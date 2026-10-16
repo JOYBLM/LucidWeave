@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>LUCID WEAVE</title>
 <style>
 *{box-sizing:border-box}
@@ -53,6 +53,21 @@ button{font:inherit;color:#fff;cursor:pointer}
 #cross{position:fixed;top:50%;left:50%;width:14px;height:14px;transform:translate(-50%,-50%);border:2px solid rgba(255,255,255,.9);border-radius:50%;pointer-events:none;z-index:10;opacity:0;transition:all .25s cubic-bezier(.175,.885,.32,1.275);box-shadow:0 0 15px rgba(255,113,206,.8)}
 #cross.show{opacity:1}
 #cross.act{width:42px;height:42px;border-color:#ff71ce;border-radius:6px;transform:translate(-50%,-50%) rotate(45deg);box-shadow:0 0 35px #ff71ce,inset 0 0 20px #05ffa1}
+html,body{touch-action:none}.card{touch-action:pan-y}
+.sws{display:flex;gap:10px;justify-content:center;margin:4px 0 10px}
+.sw{width:30px;height:30px;border-radius:50%;border:2px solid rgba(255,255,255,.25);padding:0}
+.sw.on{border-color:#fff;box-shadow:0 0 14px currentColor}
+#lb{position:absolute;top:calc(118px + env(safe-area-inset-top,0px));right:18px;min-width:150px;font:600 11px monospace;letter-spacing:.06em}
+.lr{display:flex;gap:8px;align-items:center;justify-content:flex-end;padding:3px 9px;margin-bottom:3px;border-radius:9px;background:rgba(10,5,25,.55);border:1px solid rgba(255,255,255,.12)}
+.lr.me{border-color:rgba(255,113,206,.65)}
+.lr i{width:9px;height:9px;border-radius:50%;background:currentColor;box-shadow:0 0 8px currentColor}
+.lr b{color:#fff}.lr small{color:#7fe9ff;font-size:11px;min-width:26px;text-align:right}
+.lbo .lr{justify-content:flex-start;font-size:14px;padding:8px 12px}.lbo .lr span{flex:1;text-align:left}
+#tc{position:fixed;inset:0;z-index:12;pointer-events:none;display:none}
+#js{position:absolute;left:calc(26px + env(safe-area-inset-left,0px));bottom:calc(34px + env(safe-area-inset-bottom,0px));width:130px;height:130px;border-radius:50%;pointer-events:auto;border:2px solid rgba(1,205,254,.6);background:rgba(1,205,254,.1);box-shadow:0 0 24px rgba(1,205,254,.4)}
+#jk{position:absolute;left:50%;top:50%;width:54px;height:54px;border-radius:50%;transform:translate(-50%,-50%);background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.55),rgba(1,205,254,.45))}
+#pb{position:absolute;right:calc(26px + env(safe-area-inset-right,0px));bottom:calc(34px + env(safe-area-inset-bottom,0px));width:92px;height:92px;border-radius:50%;pointer-events:auto;display:flex;align-items:center;justify-content:center;font:300 11px monospace;letter-spacing:.2em;border:2px solid rgba(255,113,206,.8);background:radial-gradient(circle at 35% 30%,rgba(255,255,255,.35),rgba(255,113,206,.25));box-shadow:0 0 28px rgba(255,113,206,.6)}
+#pz{position:absolute;top:calc(12px + env(safe-area-inset-top,0px));left:50%;transform:translateX(-50%);width:46px;height:36px;border-radius:12px;pointer-events:auto;display:flex;align-items:center;justify-content:center;font-size:12px;border:1px solid rgba(255,255,255,.35);background:rgba(10,5,25,.6)}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
@@ -67,8 +82,10 @@ button{font:inherit;color:#fff;cursor:pointer}
     <div class="lbl"><span>PULSE ENERGY</span></div><div class="bar" id="eb"><i></i></div>
   </div>
   <div class="stat"><span id="sc">0</span><small id="wv"></small><small id="cb"></small></div>
+  <div id="lb"></div>
   <div id="toast"></div>
 </div>
+<div id="tc"><div id="js"><div id="jk"></div></div><div id="pb">PULSE</div><div id="pz">❚❚</div></div>
 <div class="ov" id="ov"></div>
 
 <script>
@@ -80,7 +97,7 @@ const TYPES={
   shard:{hp:1,r:1.1,spd:[3.6,5.2],pts:15,dps:6,c:0xffee00,core:0xff71ce},
   titan:{hp:2,r:2.8,spd:[1,1.6],pts:30,dps:12,c:0xb967ff,core:0x05ffa1}
 };
-let G,noLock=false,locked=false,dragging=false;
+const TOUCH=matchMedia('(pointer:coarse)').matches;let tcd='',G,noLock=TOUCH,locked=false,dragging=false;
 
 /* ---------- storage ---------- */
 const bestKey=()=>'lw_best_'+S.mode;
@@ -174,7 +191,8 @@ function wire(geo,col,sc=1.02){
 }
 const glass=(ir,tr)=>new THREE.MeshPhysicalMaterial({color:0xffffff,roughness:.06,metalness:.1,transmission:tr,ior:ir,transparent:true,opacity:.9,side:THREE.DoubleSide});
 const hullGeo=new THREE.ConeGeometry(1.6,5,6,1);hullGeo.rotateX(Math.PI/2);hullGeo.scale(1,.6,1.2);
-boat.add(new THREE.Mesh(hullGeo,glass(1.6,.95)),wire(hullGeo,0x05ffa1,1.03));
+const hullMat=glass(1.6,.95),hullWire=wire(hullGeo,0x05ffa1,1.03);
+boat.add(new THREE.Mesh(hullGeo,hullMat),hullWire);
 const benchGeo=new THREE.BoxGeometry(1.8,.1,.6),benchMat=glass(1.5,.9);
 [.5,-1].forEach(z=>{const b=new THREE.Mesh(benchGeo,benchMat);b.position.set(0,.25,z);b.add(wire(benchGeo,0xff71ce,1.05));boat.add(b)});
 const lanGeo=new THREE.DodecahedronGeometry(.25);
@@ -264,8 +282,8 @@ const keys={};
 const clock=new THREE.Clock();
 
 /* ---------- co-op (PeerJS, host-authoritative) ---------- */
-const net={role:null,peer:null,conns:[],conn:null,id:0,n:1,code:'',err:'',scr:'',names:{}};
-const TN=['drifter','shard','titan'],COL=[0x05ffa1,0x01cdfe,0xffee00,0xff9b3d];
+const net={role:null,peer:null,conns:[],conn:null,id:0,n:1,code:'',err:'',scr:'',names:{},cols:{}};
+const TN=['drifter','shard','titan'],PAL=[0x01cdfe,0xff71ce,0x05ffa1,0xfffb96,0xb967ff,0xff9b3d];
 const remotes={},emap=new Map(),omap=new Map(),pulses=[],fx=[];
 let synced=false,nsT=0,dropT=0,hitT2=0;
 const r1=v=>Math.round(v*10)/10,r2=v=>Math.round(v*100)/100;
@@ -276,6 +294,20 @@ function nearestBoat(BS,pos){let b=BS[0],bd=1e9;for(const o of BS){const d=Math.
 const clean=v=>String(v||'').replace(/[\u0000-\u001f<>"'&\\]/g,'').trim().slice(0,12);
 try{S.name=clean(localStorage.getItem('lw_name'))}catch(e){S.name=''}
 function saveName(){const e=$('nm');S.name=clean(e?e.value:S.name)||'Sailor';try{localStorage.setItem('lw_name',S.name)}catch(x){}}
+const hex=c=>'#'+c.toString(16).padStart(6,'0');
+const colOf=id=>PAL[(id in net.cols?net.cols[id]:id)%PAL.length];
+try{const q=parseInt(localStorage.getItem('lw_col'));S.col=q>=0&&q<6?q:2}catch(e){S.col=2}
+function tintBoat(c){const k=new THREE.Color(c);hullMat.color.set(0xffffff).lerp(k,.28);hullWire.children[0].material.color.copy(k)}
+tintBoat(PAL[S.col]);
+const pst=id=>G.ps[id]||(G.ps[id]={s:0,k:0});
+const psArr=()=>Object.entries(G.ps).map(([k,v])=>[+k,v.s,v.k]);
+const setPs=a=>{G.ps={};a.forEach(x=>G.ps[x[0]]={s:x[1],k:x[2]})};
+function lbRows(){
+  const ids=new Set(Object.keys(net.names).map(Number));ids.add(net.id);
+  return [...ids].map(i=>({i,n:net.names[i]||(i===net.id?(S.name||'You'):'Player'),s:(G.ps[i]||{}).s||0,k:(G.ps[i]||{}).k||0}))
+    .sort((a,b)=>b.s-a.s||a.i-b.i)
+    .map(r=>'<div class="lr'+(r.i===net.id?' me':'')+'" style="color:'+hex(colOf(r.i))+'"><i></i><span>'+r.n+'</span><b>'+r.s+'</b><small>'+r.k+'K</small></div>').join('');
+}
 const qq=new THREE.Quaternion(),vv=new THREE.Vector3();
 const tagGeo=new THREE.PlaneGeometry(5,1.25);
 const tagVS='varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}';
@@ -314,12 +346,12 @@ function mkTag(name){
   const m=new THREE.Mesh(tagGeo,mat);m.renderOrder=999;m.frustumCulled=false;scene.add(m);return{m,tx,mat,name};
 }
 function dropTag(t){scene.remove(t.m);t.tx.dispose();t.mat.dispose()}
-function refreshTags(){for(const k in remotes){const r=remotes[k],nm=net.names[k]||'Player';if(r.tag.name!==nm){dropTag(r.tag);r.tag=mkTag(nm)}}}
+function refreshTags(){for(const k in remotes){const r=remotes[k],nm=net.names[k]||'Player';if(r.tag.name!==nm){dropTag(r.tag);r.tag=mkTag(nm)}const cc=colOf(k);r.mat.color.setHex(cc);r.w.children[0].material.color.setHex(cc)}}
 function setRemote(id,x,z,h){
   let r=remotes[id];
-  if(!r){const g=new THREE.Group(),col=COL[id%COL.length];
-    g.add(new THREE.Mesh(hullGeo,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.3})),wire(hullGeo,col,1.03));
-    scene.add(g);g.position.set(x,0,z);g.rotation.y=h;r=remotes[id]={g,tx:x,tz:z,th:h,tag:mkTag(net.names[id]||'Player')}}
+  if(!r){const g=new THREE.Group(),col=colOf(id);
+    const mat=new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.22}),w=wire(hullGeo,col,1.03);g.add(new THREE.Mesh(hullGeo,mat),w);
+    scene.add(g);g.position.set(x,0,z);g.rotation.y=h;r=remotes[id]={g,mat,w,tx:x,tz:z,th:h,tag:mkTag(net.names[id]||'Player')}}
   r.tx=x;r.tz=z;r.th=h;
 }
 function rmRemote(id){const r=remotes[id];if(r){scene.remove(r.g);dropTag(r.tag);delete remotes[id]}}
@@ -334,13 +366,16 @@ function fxUpdate(dt){
 function netReset(){
   try{net.peer&&net.peer.destroy()}catch(e){}
   Object.keys(remotes).forEach(rmRemote);
-  net.role=null;net.peer=null;net.conns=[];net.conn=null;net.n=1;net.names={};synced=false;
+  net.role=null;net.peer=null;net.conns=[];net.conn=null;net.n=1;net.names={};net.cols={};tintBoat(PAL[S.col]);synced=false;
 }
 function netErr(m){net.err=m;show('coop')}
 function leave(m){acts.menu();net.err=m;show('coop')}
 function lobbyUpdate(){
   net.n=net.conns.length+1;const nm={0:S.name||'Captain'};net.conns.forEach(c=>nm[c._pid]=c._name||'Player '+c._pid);net.names=nm;
-  bcast({t:'lobby',n:net.n,names:nm});refreshTags();if(net.scr==='lobby')show('lobby');
+  const used=new Set(),want={0:S.col},cols={};net.conns.forEach(c=>want[c._pid]=c._col);
+  Object.keys(want).sort().forEach(k=>{let i=want[k];if(i===undefined||used.has(i))i=[0,1,2,3,4,5].find(j=>!used.has(j));used.add(i);cols[k]=i});
+  net.cols=cols;tintBoat(colOf(0));
+  bcast({t:'lobby',n:net.n,names:nm,cols});refreshTags();if(net.scr==='lobby')show('lobby');
 }
 function hostGame(){
   if(!window.Peer)return netErr('PeerJS failed to load (offline?)');
@@ -358,10 +393,10 @@ function hostGame(){
       lobbyUpdate();
     });
     c.on('data',m=>{
-      if(m.t==='name'){c._name=clean(m.n)||'Player '+c._pid;lobbyUpdate();return}
+      if(m.t==='name'){c._name=clean(m.n)||'Player '+c._pid;c._col=Number.isInteger(m.c)&&m.c>=0&&m.c<6?m.c:undefined;lobbyUpdate();return}
       if(S.state!=='playing'&&S.state!=='paused')return;
       if(m.t==='s')setRemote(c._pid,m.x,m.z,m.h);
-      else if(m.t==='p'){pulses.push({o:new THREE.Vector3(m.x,m.y,m.z),r:.5,id:++pid});fxRing(m.x,m.y,m.z,COL[c._pid%4]);sfx.pulse();bcast({t:'pf',x:m.x,y:m.y,z:m.z,from:c._pid})}
+      else if(m.t==='p'){pulses.push({o:new THREE.Vector3(m.x,m.y,m.z),r:.5,id:++pid,owner:c._pid});fxRing(m.x,m.y,m.z,colOf(c._pid));sfx.pulse();bcast({t:'pf',x:m.x,y:m.y,z:m.z,from:c._pid})}
     });
     c.on('close',()=>{net.conns=net.conns.filter(x=>x!==c);rmRemote(c._pid);lobbyUpdate()});
   });
@@ -374,7 +409,7 @@ function joinGame(code){
   const p=net.peer=new Peer();
   p.on('open',()=>{
     const c=net.conn=p.connect('lucidweave-'+code,{reliable:true});
-    c.on('open',()=>{c.send({t:'name',n:S.name});show('lobby')});
+    c.on('open',()=>{c.send({t:'name',n:S.name,c:S.col});show('lobby')});
     c.on('data',onClient);
     c.on('close',()=>{if(net.conn===c)leave('Host left the game')});
     setTimeout(()=>{if(net.conn===c&&!c.open)leave('Could not connect - check the code')},9000);
@@ -383,18 +418,18 @@ function joinGame(code){
 }
 function onClient(m){
   if(m.t==='hello'){net.id=m.id;S.mode=m.mode;S.diff=m.diff}
-  else if(m.t==='lobby'){net.n=m.n;net.names=Object.fromEntries(Object.entries(m.names||{}).map(([k,v])=>[k,clean(v)]));refreshTags();if(net.scr==='lobby')show('lobby')}
+  else if(m.t==='lobby'){net.n=m.n;net.names=Object.fromEntries(Object.entries(m.names||{}).map(([k,v])=>[k,clean(v)]));net.cols=m.cols||{};tintBoat(colOf(net.id));refreshTags();if(net.scr==='lobby')show('lobby')}
   else if(m.t==='start'){S.mode=m.mode;S.diff=m.diff;begin(true)}
   else if(m.t==='snap'){if(S.state==='playing'||S.state==='paused')applySnap(m)}
-  else if(m.t==='over'){if(S.state==='playing'||S.state==='paused')over()}
+  else if(m.t==='over'){if(m.ps)setPs(m.ps);if(S.state==='playing'||S.state==='paused')over()}
   else if(m.t==='toast'){toast(m.m,true);if(/^WAVE \d/.test(m.m))sfx.wave()}
   else if(m.t==='orb'){G.en=100;sfx.orb();toast('HARMONY +20',true)}
-  else if(m.t==='pf'&&m.from!==net.id){fxRing(m.x,m.y,m.z,COL[m.from%4]);sfx.pulse()}
+  else if(m.t==='pf'&&m.from!==net.id){fxRing(m.x,m.y,m.z,colOf(m.from));sfx.pulse()}
 }
 function applySnap(m){
   if(!synced){T0=m.tt;synced=true}
   if(m.h<G.h-.05)dropT=.25;
-  G.h=m.h;G.score=m.sc;G.wave=m.w;G.combo=m.c;G.time=m.tm;
+  G.h=m.h;G.score=m.sc;G.wave=m.w;G.combo=m.c;G.time=m.tm;if(m.ps)setPs(m.ps);
   const seen=new Set();
   m.e.forEach(a=>{
     seen.add(a[0]);let e=emap.get(a[0]);
@@ -435,7 +470,7 @@ function netTick(dt){
   nsT-=dt;if(nsT>0)return;nsT=.05;
   if(net.role==='client'){if(net.conn&&net.conn.open)net.conn.send({t:'s',x:r1(boat.position.x),z:r1(boat.position.z),h:r2(heading)})}
   else if(net.conns.length){
-    bcast({t:'snap',tt:T0,h:r1(G.h),sc:G.score,w:G.wave,c:G.combo,tm:r1(G.time),
+    bcast({t:'snap',tt:T0,h:r1(G.h),sc:G.score,w:G.wave,c:G.combo,tm:r1(G.time),ps:psArr(),
       e:enemies.map(e=>[e.id,TN.indexOf(e.k),r1(e.g.position.x),r1(e.g.position.z),e.hp,e.dying?1:0]),
       o:orbs.map(o=>[o.id,r1(o.g.position.x),r1(o.g.position.z)]),
       p:[[0,r1(boat.position.x),r1(boat.position.z),r2(heading)]].concat(Object.keys(remotes).map(k=>[+k,r1(remotes[k].tx),r1(remotes[k].tz),r2(remotes[k].th)]))});
@@ -444,7 +479,7 @@ function netTick(dt){
 
 function reset(){
   enemies.splice(0).forEach(e=>eg.remove(e.g));orbs.splice(0).forEach(o=>eg.remove(o.g));
-  G={h:100,en:100,score:0,wave:0,combo:0,comboT:0,wd:1.2,wait:S.mode==='waves',spawnT:0,orbT:10,time:0,hitT:0,vig:0};
+  G={h:100,en:100,score:0,wave:0,combo:0,comboT:0,wd:1.2,wait:S.mode==='waves',spawnT:0,orbT:10,time:0,hitT:0,vig:0,ps:{}};
   boat.position.set(0,0,0);boat.quaternion.identity();heading=0;speed=0;lookYaw=0;lookPitch=0;pActive=false;pulses.length=0;eid=0;oid=0;emap.clear();omap.clear();synced=false;
   sw.visible=ring.visible=false;oU.uPulse.value=-100;
 }
@@ -458,13 +493,13 @@ function pulse(){
   G.en-=35;sfx.pulse();
   pActive=true;pR=.5;pOrigin.copy(boat.position);oU.uPos.value.copy(pOrigin);
   if(net.role==='client'){if(net.conn&&net.conn.open)net.conn.send({t:'p',x:pOrigin.x,y:pOrigin.y,z:pOrigin.z})}
-  else{pulses.push({o:pOrigin.clone(),r:.5,id:++pid});if(net.role)bcast({t:'pf',x:pOrigin.x,y:pOrigin.y,z:pOrigin.z,from:0})}
+  else{pulses.push({o:pOrigin.clone(),r:.5,id:++pid,owner:0});if(net.role)bcast({t:'pf',x:pOrigin.x,y:pOrigin.y,z:pOrigin.z,from:0})}
   sw.visible=ring.visible=true;
   const c=$('cross');c.classList.add('act');setTimeout(()=>c.classList.remove('act'),500);
 }
 
 function over(){
-  if(net.role==='host')bcast({t:'over'});
+  if(net.role==='host')bcast({t:'over',ps:psArr()});
   S.state='over';if(document.pointerLockElement)document.exitPointerLock();
   sfx.over();const nb=G.score>getBest();if(nb)setBest(G.score);
   $('vig').style.opacity=0;$('cross').classList.remove('show');
@@ -500,7 +535,7 @@ function sim(dt){
       const d=p.o.distanceTo(e.g.position);
       if(d<Math.min(p.r,38)){
         e.hit=p.id;
-        if(--e.hp<=0){e.dying=true;e.t=1;G.combo++;G.comboT=4;G.score+=e.T.pts*Math.min(G.combo,8);sfx.kill(G.combo,Math.random()*.05)}
+        if(--e.hp<=0){e.dying=true;e.t=1;G.combo++;G.comboT=4;{const pt=e.T.pts*Math.min(G.combo,8),q2=pst(p.owner);q2.s+=pt;q2.k++;G.score+=pt}sfx.kill(G.combo,Math.random()*.05)}
         else{e.flash=1;tmp.subVectors(e.g.position,p.o).setY(0).normalize();e.g.position.addScaledVector(tmp,8);sfx.kill(0)}
       }
     });
@@ -541,7 +576,7 @@ function sim(dt){
     const p=o.g.position;p.y=waveH(p.x,p.z,T0)+1.8+Math.sin(T0*3)*.3;o.g.rotation.y+=dt*2;
     const grow=Math.min(1,o.t*1.5);o.g.scale.setScalar(Math.max(.001,grow));
     const cb=BS.find(b=>b.p.distanceTo(p)<4);
-    if(cb){G.h=Math.min(100,G.h+20);G.score+=25;o.t=0;if(cb.id===0){G.en=100;sfx.orb();toast('HARMONY +20',true)}else{const c=net.conns.find(x=>x._pid===cb.id);if(c&&c.open)c.send({t:'orb'})}}
+    if(cb){G.h=Math.min(100,G.h+20);G.score+=25;pst(cb.id).s+=25;o.t=0;if(cb.id===0){G.en=100;sfx.orb();toast('HARMONY +20',true)}else{const c=net.conns.find(x=>x._pid===cb.id);if(c&&c.open)c.send({t:'orb'})}}
     if(o.t<=0){eg.remove(o.g);orbs.splice(i,1)}
   }
 
@@ -579,8 +614,10 @@ function frame(){
     const alive=enemies.filter(e=>!e.dying).length;
     setT('wv',S.mode==='waves'?'WAVE '+Math.max(1,G.wave)+' · '+alive+' LEFT':'INFINITE · '+Math.floor(G.time)+'s');
     setT('cb',G.combo>1?'COMBO x'+Math.min(G.combo,8):'');
+    const lh=net.role?lbRows():'',lbE=$('lb');if(lbE._v!==lh){lbE._v=lh;lbE.innerHTML=lh}
     $('vig').style.opacity=S.state==='playing'?G.vig*.85:0;
   }
+  {const v=TOUCH&&S.state==='playing'?'block':'none';if(tcd!==v){tcd=v;$('tc').style.display=v}}
   renderer.render(scene,camera);
 }
 const setT=(id,v)=>{const e=$(id);if(e._v!==v){e._v=v;e.textContent=v}};
@@ -607,6 +644,7 @@ function show(name,extra){
     <div class="kv"><span>Mouse / Arrow keys</span><span>Look around</span></div>
     <div class="kv"><span>Click / Space</span><span>Harmonic pulse</span></div>
     <div class="kv"><span>M</span><span>Mute sound</span></div>
+    <div class="kv"><span>Touch</span><span>Stick: move · drag right: look · PULSE</span></div>
     <div class="kv"><span>Esc</span><span>Pause</span></div>
     <p><b>Phantoms</b> drain your harmony when they get close. Your pulse dissolves everything in its ring, but costs energy that slowly recharges.</p>
     <p><b>Shards</b> are small and fast. <b>Titans</b> are huge and need two pulses.</p>
@@ -616,6 +654,7 @@ function show(name,extra){
     h=`<div class="card"><h2 class="tg">Co-op</h2><p class="sub" style="margin-bottom:8px">${S.mode==='waves'?'WAVES':'INFINITE'} · ${DIFFS[S.diff].n.toUpperCase()}</p>
     ${net.err?`<div class="best" style="color:#ff71ce;margin:0 0 10px">${net.err}</div>`:''}
     <div class="lab" style="margin-top:4px">Your name</div><input id="nm" class="inp" style="font-size:16px;letter-spacing:.18em;margin-bottom:6px" maxlength="12" placeholder="YOUR NAME" value="${S.name||''}" autocomplete="off">
+    <div class="lab">Boat color</div><div class="sws">${PAL.map((c,i)=>'<button class="sw'+(S.col===i?' on':'')+'" data-c="'+i+'" style="background:radial-gradient(circle at 30% 30%,rgba(255,255,255,.6),'+hex(c)+');color:'+hex(c)+'"></button>').join('')}</div>
     <button class="go" style="margin-top:12px" data-a="host">Host a game</button>
     <div class="lab">Or join a friend</div>
     <input id="jc" class="inp" maxlength="5" placeholder="CODE" autocomplete="off" onkeydown="if(event.key==='Enter')acts.join()">
@@ -632,6 +671,7 @@ function show(name,extra){
   }else if(name==='over'){
     h=`<div class="card"><h2 class="tg">Harmony lost</h2>${extra?'<div class="best" style="margin:0 0 8px">★ NEW BEST ★</div>':''}
     <div class="stats"><div>SCORE<b>${G.score}</b></div><div>BEST<b>${getBest()}</b></div><div>${S.mode==='waves'?'WAVE':'TIME'}<b>${S.mode==='waves'?G.wave:Math.floor(G.time)+'s'}</b></div><div>MODE<b style="font-size:16px;padding-top:8px">${S.mode==='waves'?'WAVES':'INFINITE'}</b></div></div>
+    ${net.role?'<div class="lbo" style="margin-top:10px">'+lbRows()+'</div>':''}
     ${net.role==='client'?'<div class="sub" style="margin:18px 0 0">Waiting for the host to restart…</div>':'<button class="go" data-a="play">Try again</button>'}<button class="gh" data-a="menu">${net.role?'Leave game':'Main menu'}</button></div>`;
   }
   ov.innerHTML=h;
@@ -654,7 +694,8 @@ function pause(){
 }
 const acts={
   play:()=>begin(),main:()=>show('main'),how:()=>show('how'),snd:mute,
-  coop(){net.err='';show('coop')},host(){saveName();hostGame()},join(){saveName();joinGame($('jc').value)},
+  coop(){net.err='';show('coop')},
+  col(i){saveName();S.col=i;try{localStorage.setItem('lw_col',i)}catch(e){}tintBoat(PAL[i]);show('coop')},host(){saveName();hostGame()},join(){saveName();joinGame($('jc').value)},
   resume(){S.state='playing';ov.classList.add('hide');$('cross').classList.add('show');lock()},
   restart:()=>begin(),
   menu(){netReset();S.state='menu';reset();$('hud').classList.remove('on');$('cross').classList.remove('show');$('vig').style.opacity=0;show('main')}
@@ -663,7 +704,7 @@ ov.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   audioInit();sfx.click();b.blur();
   const d=b.dataset;
-  if(d.m){S.mode=d.m;show('main')}else if(d.d){S.diff=d.d;show('main')}else if(acts[d.a])acts[d.a]();
+  if(d.m){S.mode=d.m;show('main')}else if(d.d){S.diff=d.d;show('main')}else if(d.c!==undefined)acts.col(+d.c);else if(acts[d.a])acts[d.a]();
 });
 show('main');
 
@@ -697,6 +738,42 @@ addEventListener('resize',()=>{
   camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
 });
+/* ---------- touch controls ---------- */
+let jt=null,lt=null,lx=0,ly=0,jc={x:0,y:0};
+function jmove(t){
+  let dx=t.clientX-jc.x,dy=t.clientY-jc.y;const m=45,l=Math.hypot(dx,dy);if(l>m){dx*=m/l;dy*=m/l}
+  $('jk').style.transform='translate(calc(-50% + '+dx+'px),calc(-50% + '+dy+'px))';
+  keys.KeyW=dy<-14;keys.KeyS=dy>14;keys.KeyA=dx<-14;keys.KeyD=dx>14;
+}
+function tend(e){
+  for(const t of e.changedTouches){
+    if(t.identifier===jt){jt=null;keys.KeyW=keys.KeyS=keys.KeyA=keys.KeyD=false;$('jk').style.transform='translate(-50%,-50%)'}
+    if(t.identifier===lt)lt=null;
+  }
+}
+if(TOUCH){
+  document.addEventListener('touchstart',e=>{
+    if(S.state!=='playing')return;
+    for(const t of e.changedTouches){
+      const el=document.elementFromPoint(t.clientX,t.clientY);
+      if(el&&el.closest('#js')&&jt===null){jt=t.identifier;const r=$('js').getBoundingClientRect();jc={x:r.left+r.width/2,y:r.top+r.height/2};jmove(t)}
+      else if(el&&el.closest('#pb'))pulse();
+      else if(el&&el.closest('#pz'))pause();
+      else if(lt===null&&t.clientX>innerWidth*.35){lt=t.identifier;lx=t.clientX;ly=t.clientY}
+    }
+    e.preventDefault();
+  },{passive:false});
+  document.addEventListener('touchmove',e=>{
+    for(const t of e.changedTouches){
+      if(t.identifier===jt)jmove(t);
+      else if(t.identifier===lt&&S.state==='playing'){
+        lookYaw-=(t.clientX-lx)*.005;lookPitch=Math.max(-1.4,Math.min(1.4,lookPitch-(t.clientY-ly)*.005));lx=t.clientX;ly=t.clientY;
+      }
+    }
+    if(S.state==='playing')e.preventDefault();
+  },{passive:false});
+  document.addEventListener('touchend',tend);document.addEventListener('touchcancel',tend);
+}
 </script>
 </body>
 </html>
