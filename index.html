@@ -264,7 +264,7 @@ const keys={};
 const clock=new THREE.Clock();
 
 /* ---------- co-op (PeerJS, host-authoritative) ---------- */
-const net={role:null,peer:null,conns:[],conn:null,id:0,n:1,code:'',err:'',scr:''};
+const net={role:null,peer:null,conns:[],conn:null,id:0,n:1,code:'',err:'',scr:'',names:{}};
 const TN=['drifter','shard','titan'],COL=[0x05ffa1,0x01cdfe,0xffee00,0xff9b3d];
 const remotes={},emap=new Map(),omap=new Map(),pulses=[],fx=[];
 let synced=false,nsT=0,dropT=0,hitT2=0;
@@ -273,14 +273,56 @@ const bcast=m=>net.conns.forEach(c=>c.open&&c.send(m));
 function pickBoat(){const k=Object.keys(remotes),i=Math.random()*(k.length+1)|0;return i===0?boat.position:remotes[k[i-1]].g.position}
 function boats(){const a=[{p:boat.position,id:0}];for(const k in remotes)a.push({p:remotes[k].g.position,id:+k});return a}
 function nearestBoat(BS,pos){let b=BS[0],bd=1e9;for(const o of BS){const d=Math.hypot(o.p.x-pos.x,o.p.z-pos.z);if(d<bd){bd=d;b=o}}return b}
+const clean=v=>String(v||'').replace(/[\u0000-\u001f<>"'&\\]/g,'').trim().slice(0,12);
+try{S.name=clean(localStorage.getItem('lw_name'))}catch(e){S.name=''}
+function saveName(){const e=$('nm');S.name=clean(e?e.value:S.name)||'Sailor';try{localStorage.setItem('lw_name',S.name)}catch(x){}}
+const qq=new THREE.Quaternion(),vv=new THREE.Vector3();
+const tagGeo=new THREE.PlaneGeometry(5,1.25);
+const tagVS='varying vec2 vUv;void main(){vUv=uv;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}';
+const tagFS=`varying vec2 vUv;uniform sampler2D map;uniform float uTime,uFade;${hsv}
+void main(){
+  vec3 m=texture2D(map,vUv).rgb;
+  vec2 p=vUv-.5;p.x*=4.;float r=length(p),th=atan(p.y,p.x);
+  float rp=sin(r*9.-uTime*2.+sin(th*6.+uTime)*2.);
+  float h=fract(vUv.x*.5+r*.12+uTime*.12+rp*.15);
+  vec3 rb=hsv2rgb(vec3(h,.85,.6+abs(rp)*.4));
+  float sp=pow(abs(sin(th*10.+uTime*3.)*cos(r*14.-uTime*3.)),4.);
+  vec3 spk=hsv2rgb(vec3(fract(h+.5),1.,1.))*sp;
+  float a=clamp(m.g*.3+m.r*.95+m.b*.9,0.,1.);
+  vec3 col=(rb*m.g*.35+(rb*.9+spk*1.2)*m.r+mix(vec3(1.),rb,.35)*m.b)/max(a,.3);
+  gl_FragColor=vec4(col,a*uFade);
+}`;
+function tagTex(name){
+  const c=document.createElement('canvas');c.width=512;c.height=128;const x=c.getContext('2d');
+  x.fillStyle='#000';x.fillRect(0,0,512,128);x.globalCompositeOperation='lighter';
+  const P=[[6,64],[50,8],[462,8],[506,64],[462,120],[50,120]];
+  x.beginPath();P.forEach((q,i)=>i?x.lineTo(q[0],q[1]):x.moveTo(q[0],q[1]));x.closePath();
+  x.fillStyle='rgb(0,255,0)';x.fill();x.strokeStyle='rgb(0,0,255)';x.lineWidth=5;x.stroke();
+  x.lineWidth=2;x.strokeStyle='rgb(0,0,110)';x.beginPath();
+  x.moveTo(50,8);x.lineTo(130,64);x.lineTo(50,120);x.moveTo(462,8);x.lineTo(382,64);x.lineTo(462,120);
+  x.moveTo(130,64);x.lineTo(256,8);x.lineTo(382,64);x.stroke();
+  const t=name.toUpperCase();let fs=56;
+  x.font='400 '+fs+'px Inter,system-ui,sans-serif';
+  if('letterSpacing' in x)x.letterSpacing='4px';
+  while(x.measureText(t).width>330&&fs>18){fs-=2;x.font='400 '+fs+'px Inter,system-ui,sans-serif'}
+  x.textAlign='center';x.textBaseline='middle';
+  x.shadowColor='rgb(255,0,0)';x.shadowBlur=10;x.fillStyle='rgb(255,0,0)';x.fillText(t,256,68);
+  const tx=new THREE.CanvasTexture(c);tx.minFilter=THREE.LinearFilter;tx.generateMipmaps=false;return tx;
+}
+function mkTag(name){
+  const tx=tagTex(name),mat=new THREE.ShaderMaterial({uniforms:{map:{value:tx},uTime:oU.uTime,uFade:{value:1}},vertexShader:tagVS,fragmentShader:tagFS,transparent:true,depthTest:false,depthWrite:false,side:THREE.DoubleSide});
+  const m=new THREE.Mesh(tagGeo,mat);m.renderOrder=999;m.frustumCulled=false;scene.add(m);return{m,tx,mat,name};
+}
+function dropTag(t){scene.remove(t.m);t.tx.dispose();t.mat.dispose()}
+function refreshTags(){for(const k in remotes){const r=remotes[k],nm=net.names[k]||'Player';if(r.tag.name!==nm){dropTag(r.tag);r.tag=mkTag(nm)}}}
 function setRemote(id,x,z,h){
   let r=remotes[id];
   if(!r){const g=new THREE.Group(),col=COL[id%COL.length];
     g.add(new THREE.Mesh(hullGeo,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.3})),wire(hullGeo,col,1.03));
-    scene.add(g);g.position.set(x,0,z);g.rotation.y=h;r=remotes[id]={g,tx:x,tz:z,th:h}}
+    scene.add(g);g.position.set(x,0,z);g.rotation.y=h;r=remotes[id]={g,tx:x,tz:z,th:h,tag:mkTag(net.names[id]||'Player')}}
   r.tx=x;r.tz=z;r.th=h;
 }
-function rmRemote(id){const r=remotes[id];if(r){scene.remove(r.g);delete remotes[id]}}
+function rmRemote(id){const r=remotes[id];if(r){scene.remove(r.g);dropTag(r.tag);delete remotes[id]}}
 function fxRing(x,y,z,col){
   const m=new THREE.Mesh(ringGeo,new THREE.MeshBasicMaterial({color:col,transparent:true,opacity:.8,side:THREE.DoubleSide,blending:add,depthWrite:false}));
   m.position.set(x,y,z);scene.add(m);fx.push({m,r:.5});
@@ -292,17 +334,20 @@ function fxUpdate(dt){
 function netReset(){
   try{net.peer&&net.peer.destroy()}catch(e){}
   Object.keys(remotes).forEach(rmRemote);
-  net.role=null;net.peer=null;net.conns=[];net.conn=null;net.n=1;synced=false;
+  net.role=null;net.peer=null;net.conns=[];net.conn=null;net.n=1;net.names={};synced=false;
 }
 function netErr(m){net.err=m;show('coop')}
 function leave(m){acts.menu();net.err=m;show('coop')}
-function lobbyUpdate(){net.n=net.conns.length+1;bcast({t:'lobby',n:net.n});if(net.scr==='lobby')show('lobby')}
+function lobbyUpdate(){
+  net.n=net.conns.length+1;const nm={0:S.name||'Captain'};net.conns.forEach(c=>nm[c._pid]=c._name||'Player '+c._pid);net.names=nm;
+  bcast({t:'lobby',n:net.n,names:nm});refreshTags();if(net.scr==='lobby')show('lobby');
+}
 function hostGame(){
   if(!window.Peer)return netErr('PeerJS failed to load (offline?)');
   netReset();net.role='host';net.id=0;net.err='';
   net.code=Array.from({length:5},()=>'ABCDEFGHJKLMNPQRSTUVWXYZ'[Math.random()*24|0]).join('');
   const p=net.peer=new Peer('lucidweave-'+net.code);
-  p.on('open',()=>show('lobby'));
+  p.on('open',()=>{lobbyUpdate();show('lobby')});
   p.on('error',e=>{if(e.type==='unavailable-id')hostGame();else{netReset();netErr('Connection error: '+e.type)}});
   p.on('connection',c=>{
     if(net.conns.length>=3){c.on('open',()=>c.close());return}
@@ -313,6 +358,7 @@ function hostGame(){
       lobbyUpdate();
     });
     c.on('data',m=>{
+      if(m.t==='name'){c._name=clean(m.n)||'Player '+c._pid;lobbyUpdate();return}
       if(S.state!=='playing'&&S.state!=='paused')return;
       if(m.t==='s')setRemote(c._pid,m.x,m.z,m.h);
       else if(m.t==='p'){pulses.push({o:new THREE.Vector3(m.x,m.y,m.z),r:.5,id:++pid});fxRing(m.x,m.y,m.z,COL[c._pid%4]);sfx.pulse();bcast({t:'pf',x:m.x,y:m.y,z:m.z,from:c._pid})}
@@ -328,7 +374,7 @@ function joinGame(code){
   const p=net.peer=new Peer();
   p.on('open',()=>{
     const c=net.conn=p.connect('lucidweave-'+code,{reliable:true});
-    c.on('open',()=>show('lobby'));
+    c.on('open',()=>{c.send({t:'name',n:S.name});show('lobby')});
     c.on('data',onClient);
     c.on('close',()=>{if(net.conn===c)leave('Host left the game')});
     setTimeout(()=>{if(net.conn===c&&!c.open)leave('Could not connect - check the code')},9000);
@@ -337,7 +383,7 @@ function joinGame(code){
 }
 function onClient(m){
   if(m.t==='hello'){net.id=m.id;S.mode=m.mode;S.diff=m.diff}
-  else if(m.t==='lobby'){net.n=m.n;if(net.scr==='lobby')show('lobby')}
+  else if(m.t==='lobby'){net.n=m.n;net.names=Object.fromEntries(Object.entries(m.names||{}).map(([k,v])=>[k,clean(v)]));refreshTags();if(net.scr==='lobby')show('lobby')}
   else if(m.t==='start'){S.mode=m.mode;S.diff=m.diff;begin(true)}
   else if(m.t==='snap'){if(S.state==='playing'||S.state==='paused')applySnap(m)}
   else if(m.t==='over'){if(S.state==='playing'||S.state==='paused')over()}
@@ -380,8 +426,11 @@ function clientSim(dt){
   G.vig+=((dm?1:0)-G.vig)*Math.min(1,dt*6);
 }
 function netTick(dt){
+  if(Object.keys(remotes).length){camera.getWorldQuaternion(qq);camera.getWorldPosition(vv)}
   for(const k in remotes){const r=remotes[k],p=r.g.position,f=Math.min(1,dt*10);
-    p.x+=(r.tx-p.x)*f;p.z+=(r.tz-p.z)*f;p.y=waveH(p.x,p.z,T0)+.1;r.g.rotation.y+=(r.th-r.g.rotation.y)*f}
+    p.x+=(r.tx-p.x)*f;p.z+=(r.tz-p.z)*f;p.y=waveH(p.x,p.z,T0)+.1;r.g.rotation.y+=(r.th-r.g.rotation.y)*f;
+    const d=vv.distanceTo(p),sc=Math.max(1,d/28),m=r.tag.m;
+    m.scale.setScalar(sc);m.position.set(p.x,p.y+3+sc*.6,p.z);m.quaternion.copy(qq);r.tag.mat.uniforms.uFade.value=Math.min(1,d/6)}
   if(!net.role||(S.state!=='playing'&&S.state!=='paused'))return;
   nsT-=dt;if(nsT>0)return;nsT=.05;
   if(net.role==='client'){if(net.conn&&net.conn.open)net.conn.send({t:'s',x:r1(boat.position.x),z:r1(boat.position.z),h:r2(heading)})}
@@ -566,15 +615,16 @@ function show(name,extra){
   }else if(name==='coop'){
     h=`<div class="card"><h2 class="tg">Co-op</h2><p class="sub" style="margin-bottom:8px">${S.mode==='waves'?'WAVES':'INFINITE'} · ${DIFFS[S.diff].n.toUpperCase()}</p>
     ${net.err?`<div class="best" style="color:#ff71ce;margin:0 0 10px">${net.err}</div>`:''}
-    <button class="go" style="margin-top:4px" data-a="host">Host a game</button>
+    <div class="lab" style="margin-top:4px">Your name</div><input id="nm" class="inp" style="font-size:16px;letter-spacing:.18em;margin-bottom:6px" maxlength="12" placeholder="YOUR NAME" value="${S.name||''}" autocomplete="off">
+    <button class="go" style="margin-top:12px" data-a="host">Host a game</button>
     <div class="lab">Or join a friend</div>
     <input id="jc" class="inp" maxlength="5" placeholder="CODE" autocomplete="off" onkeydown="if(event.key==='Enter')acts.join()">
     <button class="gh" data-a="join">Join</button><button class="gh" data-a="main">Back</button></div>`;
   }else if(name==='lobby'){
     h=net.role==='host'?`<div class="card"><h2 class="tg">Lobby</h2><p class="sub">SHARE THIS CODE WITH YOUR FRIENDS</p>
     <div class="tg" style="font:700 52px monospace;letter-spacing:.3em;margin:6px 0 10px">${net.code}</div>
-    <div class="best">PLAYERS: ${net.n} / 4</div><button class="go" data-a="play">Start voyage</button><button class="gh" data-a="menu">Leave</button></div>`
-    :`<div class="card"><h2 class="tg">Connected</h2><p class="sub">WAITING FOR THE HOST TO START…</p><div class="best">PLAYERS: ${net.n} / 4</div><button class="gh" style="margin-top:20px" data-a="menu">Leave</button></div>`;
+    <div class="best">PLAYERS: ${net.n} / 4</div><div class="sub" style="margin:10px 0 0">${Object.values(net.names).join(' · ')}</div><button class="go" data-a="play">Start voyage</button><button class="gh" data-a="menu">Leave</button></div>`
+    :`<div class="card"><h2 class="tg">Connected</h2><p class="sub">WAITING FOR THE HOST TO START…</p><div class="best">PLAYERS: ${net.n} / 4</div><div class="sub" style="margin:10px 0 0">${Object.values(net.names).join(' · ')}</div><button class="gh" style="margin-top:20px" data-a="menu">Leave</button></div>`;
   }else if(name==='pause'){
     h=`<div class="card"><h2 class="tg">Paused</h2><button class="go" style="margin-top:6px" data-a="resume">Resume</button>
     <div class="row c2">${net.role==='client'?'<div></div>':'<button class="gh" data-a="restart">Restart</button>'}<button class="gh" data-a="menu">${net.role?'Leave game':'Main menu'}</button></div>
@@ -604,7 +654,7 @@ function pause(){
 }
 const acts={
   play:()=>begin(),main:()=>show('main'),how:()=>show('how'),snd:mute,
-  coop(){net.err='';show('coop')},host:hostGame,join(){joinGame($('jc').value)},
+  coop(){net.err='';show('coop')},host(){saveName();hostGame()},join(){saveName();joinGame($('jc').value)},
   resume(){S.state='playing';ov.classList.add('hide');$('cross').classList.add('show');lock()},
   restart:()=>begin(),
   menu(){netReset();S.state='menu';reset();$('hud').classList.remove('on');$('cross').classList.remove('show');$('vig').style.opacity=0;show('main')}
