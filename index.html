@@ -643,8 +643,20 @@ try{S.comfort=localStorage.getItem('lw_comfort')==='1'}catch(e){S.comfort=false}
 const _q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0);
 function applyComfort(){turnRate=(vr&&S.comfort)?0.7:1.3}
 let vrCal=-.5,vrCalDone=false,vrSeat=0;const VR_EYE=1.0,_o=new THREE.Vector3();
+const vrH0=new THREE.Vector3(0,1,0),_rb=new THREE.Quaternion(),_b=new THREE.Vector3(),_p=new THREE.Vector3();
+let vrYawCal=0;
 function vrCalibrate(){
-  try{const hy=renderer.xr.getCamera(camera).matrix.elements[13];if(hy>.4&&hy<2.6){vrCal=VR_EYE-hy;vrCalDone=true}}catch(e){}
+  try{
+    const m=renderer.xr.getCamera(camera).matrix.elements;
+    if(m[13]>.4&&m[13]<2.6){
+      vrH0.set(m[12],m[13],m[14]);               // where the head is in the headset's own space
+      const psi=Math.atan2(m[8],m[10]);           // which way the head faces in that space
+      vrYawCal=-psi;                              // turn the whole rig so that is the bow direction
+      vrHud.rotation.order='YXZ';vrHud.rotation.set(-.17,psi,0);
+      vrHud.position.set(vrH0.x-Math.sin(psi)*2.5,vrH0.y-.7,vrH0.z-Math.cos(psi)*2.5);
+      vrCalDone=true;
+    }
+  }catch(e){}
 }
 try{if(navigator.xr&&navigator.xr.isSessionSupported)navigator.xr.isSessionSupported('immersive-vr').then(ok=>{VRok=ok;if(net.scr==='main')show('main')}).catch(()=>{})}catch(e){}
 function vrBtn(){return '<button class="gh" data-a="vr"'+(VRok?'':' style="opacity:.55"')+'>'+(VRok?'🥽 Enter VR':'🥽 VR unavailable here')+'</button><button class="gh" data-a="comfort">'+(S.comfort?'🛡️ VR comfort mode: ON (calm)':'🌀 VR comfort mode: OFF (full trippy waves)')+'</button><div class="sub" id="vrm" style="margin:6px 0 0"></div>'}
@@ -711,18 +723,17 @@ function pollVR(dt){
 }
 function vrCam(dt){
   if(!vrCalDone)vrCalibrate();
-  const hOff=vrCal+vrSeat;
   if(S.comfort){
     vrY+=(boat.position.y-vrY)*Math.min(1,dt*4);
-    dolly.rotation.set(0,heading+vrYaw,0);
-    _o.set(0,hOff,.5).applyQuaternion(_q.setFromAxisAngle(_up,heading));
-    dolly.position.set(boat.position.x+_o.x,vrY+_o.y,boat.position.z+_o.z);
+    _rb.setFromAxisAngle(_up,heading);_b.set(boat.position.x,vrY,boat.position.z);
   }else{
-    vrY=boat.position.y;
-    dolly.quaternion.copy(boat.quaternion).multiply(_q.setFromAxisAngle(_up,vrYaw));
-    _o.set(0,hOff,.5).applyQuaternion(boat.quaternion);
-    dolly.position.set(boat.position.x+_o.x,boat.position.y+_o.y,boat.position.z+_o.z);
+    vrY=boat.position.y;_rb.copy(boat.quaternion);_b.copy(boat.position);
   }
+  // whole rig rotates (snap turn) around the seat, not around the room origin
+  dolly.quaternion.copy(_rb).multiply(_q.setFromAxisAngle(_up,vrYaw+vrYawCal));
+  _o.set(0,VR_EYE+vrSeat,.5).applyQuaternion(_rb).add(_b);       // seat in the world
+  _p.copy(vrH0).applyQuaternion(dolly.quaternion);                // head offset inside the rig
+  dolly.position.copy(_o).sub(_p);                                // put the head exactly on the seat
 }
 function lbList(){
   const ids=new Set(Object.keys(net.names).map(Number));ids.add(net.id);
