@@ -651,7 +651,8 @@ async function enterVR(){
   if(vr)return;
   try{
     renderer.xr.setReferenceSpaceType('local-floor');
-    renderer.xr.setFramebufferScaleFactor(.8);renderer.xr.setFoveation(1);
+    if(renderer.xr.setFramebufferScaleFactor)renderer.xr.setFramebufferScaleFactor(.8);
+    if(renderer.xr.setFoveation)renderer.xr.setFoveation(1);
     const ss=await navigator.xr.requestSession('immersive-vr',{optionalFeatures:['local-floor','bounded-floor']});
     await renderer.xr.setSession(ss);
     ss.addEventListener('end',onVREnd);onVRStart();
