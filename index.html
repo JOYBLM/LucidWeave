@@ -302,7 +302,7 @@ function saveName(){const e=$('nm');S.name=clean(e?e.value:S.name)||'Sailor';try
 const hex=c=>'#'+c.toString(16).padStart(6,'0');
 const colOf=id=>PAL[(id in net.cols?net.cols[id]:id)%PAL.length];
 try{const q=parseInt(localStorage.getItem('lw_col'));S.col=q>=0&&q<6?q:2}catch(e){S.col=2}
-function tintBoat(c){const k=new THREE.Color(c);hullMat.color.set(0xffffff).lerp(k,.28);hullWire.children[0].material.color.copy(k)}
+function tintBoat(c){const k=new THREE.Color(c);hullMat.color.set(0xffffff).lerp(k,.28);hullWire.children[0].material.color.copy(k);if(vr)hullMat.emissive.copy(k)}
 tintBoat(PAL[S.col]);
 const pst=id=>G.ps[id]||(G.ps[id]={s:0,k:0});
 const psArr=()=>Object.entries(G.ps).map(([k,v])=>[+k,v.s,v.k]);
@@ -642,10 +642,22 @@ const vrPrev={};let hudT=0;
 try{S.comfort=localStorage.getItem('lw_comfort')==='1'}catch(e){S.comfort=false}
 const _q=new THREE.Quaternion(),_up=new THREE.Vector3(0,1,0);
 function applyComfort(){turnRate=(vr&&S.comfort)?0.7:1.3}
+let vrCal=-.5,vrCalDone=false,vrSeat=0;const VR_EYE=1.0,_o=new THREE.Vector3();
+function vrCalibrate(){
+  try{const hy=renderer.xr.getCamera(camera).matrix.elements[13];if(hy>.4&&hy<2.6){vrCal=VR_EYE-hy;vrCalDone=true}}catch(e){}
+}
 try{if(navigator.xr&&navigator.xr.isSessionSupported)navigator.xr.isSessionSupported('immersive-vr').then(ok=>{VRok=ok;if(net.scr==='main')show('main')}).catch(()=>{})}catch(e){}
 function vrBtn(){return '<button class="gh" data-a="vr"'+(VRok?'':' style="opacity:.55"')+'>'+(VRok?'🥽 Enter VR':'🥽 VR unavailable here')+'</button><button class="gh" data-a="comfort">'+(S.comfort?'🛡️ VR comfort mode: ON (calm)':'🌀 VR comfort mode: OFF (full trippy waves)')+'</button><div class="sub" id="vrm" style="margin:6px 0 0"></div>'}
 function vrMsg(m){const e=$('vrm');if(e)e.textContent=m}
-function vrQuality(on){hullMat.transmission=on?0:.95;benchMat.transmission=on?0:.9;renderer.setPixelRatio(on?1:Math.min(devicePixelRatio,2))}
+function vrQuality(on){
+  hullMat.transmission=on?0:.95;benchMat.transmission=on?0:.9;
+  hullMat.opacity=on?.3:.9;benchMat.opacity=on?.4:.9;
+  hullMat.metalness=benchMat.metalness=on?0:.1;hullMat.roughness=benchMat.roughness=on?.5:.06;
+  if(on)hullMat.emissive.copy(hullWire.children[0].material.color);else hullMat.emissive.setHex(0);
+  benchMat.emissive.setHex(on?0xff71ce:0);hullMat.emissiveIntensity=benchMat.emissiveIntensity=on?.55:1;
+  hullMat.needsUpdate=benchMat.needsUpdate=true;
+  renderer.setPixelRatio(on?1:Math.min(devicePixelRatio,2));
+}
 async function enterVR(){
   if(!navigator.xr){vrMsg('VR is not available in this browser');return}
   if(vr)return;
@@ -659,7 +671,7 @@ async function enterVR(){
   }catch(e){vrMsg('Could not start VR: '+(e&&e.message?e.message:'no headset found'))}
 }
 function onVRStart(){
-  vr=true;vrYaw=0;vrY=boat.position.y;applyComfort();
+  vr=true;vrYaw=0;vrY=boat.position.y;vrCal=-.5;vrCalDone=false;vrSeat=0;applyComfort();
   dolly.add(camera);camera.position.set(0,0,0);camera.rotation.set(0,0,0);
   vrHud.visible=true;vrQuality(true);ov.classList.add('hide');$('cross').classList.remove('show');
   if(S.state==='paused')acts.resume();
@@ -680,7 +692,7 @@ function pollVR(dt){
     const h=src.handedness,ax=gp.axes,bt=gp.buttons;
     const x=ax[2]!==undefined?ax[2]:(ax[0]||0),y=ax[3]!==undefined?ax[3]:(ax[1]||0);
     if(h==='left'){mv=-y;st=x}
-    else{if(Math.abs(x)>.7){if(!vrPrev.snap){vrYaw-=Math.sign(x)*Math.PI/6;vrPrev.snap=1}}else vrPrev.snap=0}
+    else{if(Math.abs(x)>.7){if(!vrPrev.snap){vrYaw-=Math.sign(x)*Math.PI/6;vrPrev.snap=1}}else vrPrev.snap=0;if(Math.abs(y)>.5&&Math.abs(x)<.5)vrSeat=Math.max(-.9,Math.min(.9,vrSeat-y*dt*.6))}
     const trig=!!(bt[0]&&bt[0].pressed),ex=!!(bt[5]&&bt[5].pressed);
     if(trig&&!vrPrev[h+'t']){
       if(S.state==='playing'){pulse();buzz(src,.7,90)}
@@ -690,19 +702,26 @@ function pollVR(dt){
     const ab=!!(bt[4]&&bt[4].pressed);
     if(ab&&!vrPrev[h+'a']){acts.comfort();toast(S.comfort?'COMFORT MODE ON':'TRIPPY WAVES ON',true)}
     vrPrev[h+'a']=ab;
+    const sc=!!(bt[3]&&bt[3].pressed);
+    if(sc&&!vrPrev[h+'s']){vrCalDone=false;vrSeat=0;vrYaw=0;toast('VIEW RECENTERED',true)}
+    vrPrev[h+'s']=sc;
     vrPrev[h+'t']=trig;vrPrev[h+'b']=ex;
   }
   keys.KeyW=mv>.35;keys.KeyS=mv<-.35;keys.KeyA=st<-.35;keys.KeyD=st>.35;
 }
 function vrCam(dt){
+  if(!vrCalDone)vrCalibrate();
+  const hOff=vrCal+vrSeat;
   if(S.comfort){
     vrY+=(boat.position.y-vrY)*Math.min(1,dt*4);
-    dolly.position.set(boat.position.x,vrY+.1,boat.position.z);
     dolly.rotation.set(0,heading+vrYaw,0);
+    _o.set(0,hOff,.5).applyQuaternion(_q.setFromAxisAngle(_up,heading));
+    dolly.position.set(boat.position.x+_o.x,vrY+_o.y,boat.position.z+_o.z);
   }else{
     vrY=boat.position.y;
-    dolly.position.set(boat.position.x,boat.position.y+.1,boat.position.z);
     dolly.quaternion.copy(boat.quaternion).multiply(_q.setFromAxisAngle(_up,vrYaw));
+    _o.set(0,hOff,.5).applyQuaternion(boat.quaternion);
+    dolly.position.set(boat.position.x+_o.x,boat.position.y+_o.y,boat.position.z+_o.z);
   }
 }
 function lbList(){
@@ -731,7 +750,7 @@ function hudVR(dt){
     x.fillStyle=r.i===net.id?'#fff':'#d8d2ee';x.font='600 22px monospace';x.fillText(r.n,54,y);
     x.textAlign='right';x.fillText(r.s+'  '+r.k+'K',420,y);x.textAlign='left';
   });
-  x.fillStyle='rgba(255,255,255,.55)';x.font='500 18px monospace';x.fillText('A / X : COMFORT '+(S.comfort?'ON':'OFF')+'    B / Y : EXIT VR',28,302);
+  x.fillStyle='rgba(255,255,255,.55)';x.font='500 18px monospace';x.font='500 16px monospace';x.fillText('A/X comfort '+(S.comfort?'ON':'OFF')+' · B/Y exit · stick click: recenter',28,302);
   if(S.state==='over'){
     x.fillStyle='rgba(6,2,16,.82)';rr(x,4,4,632,312,28);x.fill();x.textAlign='center';
     x.font='300 48px sans-serif';x.fillStyle='#fff';x.fillText('HARMONY LOST',320,120);
@@ -766,7 +785,7 @@ function show(name,extra){
     <div class="kv"><span>Click / Space</span><span>Harmonic pulse</span></div>
     <div class="kv"><span>M</span><span>Mute sound</span></div>
     <div class="kv"><span>Touch</span><span>Stick: move · drag right: look · PULSE</span></div>
-    <div class="kv"><span>VR</span><span>L stick: row/steer · R stick: turn · Trigger: pulse · A/X: comfort mode · B/Y: exit</span></div>
+    <div class="kv"><span>VR</span><span>L stick: row/steer · R stick: turn (up/down: seat height) · Trigger: pulse · A/X: comfort mode · B/Y: exit · stick click: recenter</span></div>
     <div class="kv"><span>Esc</span><span>Pause</span></div>
     <p><b>Phantoms</b> drain your harmony when they get close. Your pulse dissolves everything in its ring, but costs energy that slowly recharges.</p>
     <p><b>Shards</b> are small and fast. <b>Titans</b> are huge and need two pulses.</p>
